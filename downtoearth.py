@@ -3,13 +3,25 @@ import requests
 import urllib
 import re
 import nltk
+from elasticsearch import Elasticsearch
 
 
-def down:
+es1 = Elasticsearch(['http://167.86.104.221:9200'], timeout=30)
+def get_lat_long(q):
+    print(q)
+    res = es1.search(index='location_latlong', doc_type='loc-type',
+                    body={"query": {"dis_max": { "queries": {"match": {"Address": q}}}}}, request_timeout=60)
+    return res
+
+
+
+def run():
     #https://www.downtoearth.org.in/category/natural-disasters/news?page=1&per-page=25
     page = requests.get('https://www.downtoearth.org.in/category/natural-disasters/news?page=1&per-page=25')
     disaster = ['flood','storm', 'cyclone','earthquake', 'volcanic', 'tsunami', 'volcanic', 'cyclones', 'tornado', 'storms', 'landslides', 'waves', 'wildfire', 'drought', 'blizzard', 'avalanche', 'heatwave','thunderstorms']
-
+    f = open('country.txt','r')
+    contents = f.read().lower()
+    contents = nltk.word_tokenize(contents)
     soup = bs(page.text, 'lxml')
 
                                                  
@@ -21,7 +33,12 @@ def down:
         spage = bs(page,'lxml')
         paragraphs=spage.find_all('p')
         article_text=""
-        
+        tags = spage.find('div',{'class':'author-categories-tags'})
+        country = tags.find_all('a')
+        con = ''
+        for i in country:
+            if i.text.lower() in contents:
+                con = i.text.lower()
 
         for p in paragraphs:
             article_text+=p.text
@@ -79,11 +96,31 @@ def down:
 
             summary = ' '.join(summary_sentences)
             if summary:
+                try:
+                            p = get_lat_long(con)
+                            sample = p['hits']['hits'][0]
+                            latitude = (sample['_source']['geolocation']['lat'])
+                            longitude = (sample['_source']['geolocation']['lon'])
+                except Exception as e:
+                            latitude = 0
+                            longitude = 0
+                            print(e)
+                dt = ''
                 for i in word1:
-                    print(i)
+                    dt = i
                 print(summary)
-                        
-                print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+                e = {
+                                'disaster_type': dt,
+                                'source':'down to earth',
+                                'summary':summary,
+                                'geoPoint': {
+                                        'lat':longitude,
+                                       'lon':longitude
+                                    }
+                           }
+                res = es.index(index='news',doc_type='enews',id=j,body=e)
+                j += 1
+               
 
 if __name__ == '__main__':       
     run()
