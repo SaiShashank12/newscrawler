@@ -2,9 +2,21 @@ from bs4 import BeautifulSoup as bs
 import urllib
 import re
 import nltk
+from elasticsearch import Elasticsearch
 
+
+es1 = Elasticsearch(['http://167.86.104.221:9200'], timeout=30)
+def get_lat_long(q):
+    print(q)
+    res = es1.search(index='location_latlong', doc_type='loc-type',
+                    body={"query": {"dis_max": { "queries": {"match": {"Address": q}}}}}, request_timeout=60)
+    return res
 
 def run():
+    
+
+    es=Elasticsearch([{'host':'localhost','port':9200}])
+    j1 = 1
     page = urllib.request.urlopen('https://www.aljazeera.com/topics/subjects/natural-disasters.html').read()
     disaster = ['flood','storm', 'cyclone','earthquake', 'volcanic', 'tsunami', 'volcanic', 'cyclones', 'tornado', 'storms', 'landslides', 'waves', 'wildfire', 'drought', 'blizzard', 'avalanche', 'heatwave','thunderstorms']
 
@@ -58,13 +70,40 @@ def run():
                 
        
         if not len(score) is 0 and  count>2:
+            dt = ''
             if summary:
                 for i in word1:
+                    dt = i
                     print('disaster tyrpe:',i)
                 print('country:',a.text)
                 print('source:aljazeera')
                 print('summary:\n',summary.text)
-                print('========================================================')
+                try:
+                    p = get_lat_long(a.text.lower())
+                    sample = p['hits']['hits'][0]
+                    latitude = (sample['_source']['geolocation']['lat'])
+                    longitude = (sample['_source']['geolocation']['lon'])
+                except Exception as e:
+                    latitude = 0
+                    longitude = 0
+                    print(e)
+                print("Longitude", longitude)
+                print("Latitude", latitude)
+                e1 = {
+                                'disaster_type': dt[0],
+                                'country':a.text,
+                                'source':'aljazeera',
+                                'summary':summary.text,
+                                'geoPoint': {
+                                    'lat':longitude,
+                                    'lon':longitude
+                                    }
+                                
+                                
+                            }
+                
+                res = es.index(index='anews',doc_type='dnews',id=j1,body=e1)
+                
                         
 
 if __name__ == '__main__':       
