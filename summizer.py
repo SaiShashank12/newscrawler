@@ -2,10 +2,20 @@ import bs4 as bs
 import urllib.request
 import nltk
 import re
+from elasticsearch import Elasticsearch
+
+
+es1 = Elasticsearch(['http://167.86.104.221:9200'], timeout=30)
+def get_lat_long(q):
+    print(q)
+    res = es1.search(index='location_latlong', doc_type='loc-type',
+                    body={"query": {"dis_max": { "queries": {"match": {"Address": q}}}}}, request_timeout=60)
+    return res
 
 def run():
+    es=Elasticsearch([{'host':'localhost','port':9200}])
     source = urllib.request.urlopen('https://www.newsnow.co.uk/h/World+News/Natural+Disasters').read()
-
+    j = 1
     soup = bs.BeautifulSoup(source, 'lxml')
     cc = {	"va": "vatican city",
 		"ch": "switzerland",
@@ -289,14 +299,35 @@ def run():
                     summary_sentences = heapq.nlargest(2, sentence_scores, key=sentence_scores.get)
 
                     summary = ' '.join(summary_sentences)
-                    
+                    dt = ''
                     if summary:
                         for i in word1:
+                            dt = i
                             print('disaster type:',i)
                         print('country:',cc[span['c'].lower()])
-                        print('source:',source)
-                        print('summary:\n',summary)
+                        try:
+                            p = get_lat_long(cc[span['c'].lower()])
+                            sample = p['hits']['hits'][0]
+                            latitude = (sample['_source']['geolocation']['lat'])
+                            longitude = (sample['_source']['geolocation']['lon'])
+                        except Exception as e:
+                            latitude = 0
+                            longitude = 0
+                            print(e)
                         
+                        e = {
+                                'disaster_type': dt,
+                                'source':source,
+                                'summary':summary,
+                                'geoPoint': {
+                                    'lat':longitude,
+                                    'lon':longitude
+                                    }
+                                
+                            }
+                        res = es.index(index='news',doc_type='enews',id=j,body=e)
+                        j += 1
+
                         print('++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
             except Exception as e:
                f=e
